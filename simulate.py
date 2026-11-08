@@ -12,7 +12,7 @@ import math
 import random
 from collections import Counter
 
-from building import dynamic_time_to_exit, INFO, SEATS, NEXT, CM_NEXT, WALK_SPEED, STAIR_TIME, MERGE, crowd_speed, wall_options
+from building import dynamic_time_to_exit, INFO, SEATS, NEXT, CM_NEXT, CAMERA_NEXT, WALK_SPEED, STAIR_TIME, STAIR_LANDS_IN, crowd_speed, wall_options
 from individuals import Person, choose_next, Power
 
 DT = 0.25        # time step (s)
@@ -25,27 +25,25 @@ SIGMA = math.sqrt(math.log(1 + (REACT_SD / REACT_MEAN) ** 2))
 MU = math.log(REACT_MEAN) - SIGMA ** 2 / 2
 
 def start_walking(p, queue, occupancy, rng, stair_time=STAIR_TIME, power=Power,
-                  informed=False, heading=None, speed=WALK_SPEED, speed_factor=1.0, h=None):
+                  informed=False, heading=None, speed=WALK_SPEED, speed_factor=1.0, h=None,
+                  doors=None):
     """Choose the next node and start walking."""
     scale = WALK_SPEED / (speed * speed_factor)   # NEXT / CM_NEXT times assume WALK_SPEED
     if p.node not in NEXT:
         return   # standing at a blocked door with no open door left anywhere
     if INFO[p.node]["kind"] == "stair":
-        # going down a stair: land in a first-floor spot this stair reaches,
-        # using the group's merge percentages (renormalised over those spots)
-        spots = list(NEXT[p.node])
-        weights = [MERGE[p.home].get(s, 0) for s in spots]
-        if sum(weights) == 0:
-            weights = [1] * len(spots)          # no percentage given: equally likely
-        p.next_node = rng.choices(spots, weights=weights)[0]
+        # going down a stair: land in one of its first-floor spots with the
+        # stair's fixed shares (e.g. Y: 30% S13, 70% S14), whoever you are
+        shares = STAIR_LANDS_IN[p.node]
+        p.next_node = rng.choices(list(shares), weights=list(shares.values()))[0]
         p.t_escape = stair_time
         p.state = "walking"
         return
 
-    if informed and p.node in CM_NEXT:
+    if informed and doors is not None and p.node in doors:
         # Crowd Managers: any door is an option (via the wall), and the manager knows how
         # many people are already heading to each door, so overloaded doors look slow
-        choices = CM_NEXT[p.node]
+        choices = doors[p.node]
         target = choose_next(p.node, heading, p.known_blocked, power=power, rng=rng,
                              choices=choices, scale=scale)
     else:
@@ -77,6 +75,10 @@ def run(seed=0, settings = None):
     power = settings.get("power", Power)                 # how strongly people pick the faster option
     informed = settings.get("informed", False)           # True: Crowd Managers tell everyone
                                                          # which doors are blocked
+    all_doors = settings.get("all_doors", False)         # True: knows every spot -> door distance
+                                                         # (Crowd Managers); False: own doors, then
+                                                         # along the wall (cameras)
+    doors = CM_NEXT if all_doors else CAMERA_NEXT        # door options for informed people
     react_cap = settings.get("react_cap", None)          # Crowd Managers prompt anyone who
                                                          # hasn't moved by this time (s)
     react_mu = settings.get("react_mu", MU)              # reaction time ~ LogNormal(mu, sigma)
@@ -99,7 +101,7 @@ def run(seed=0, settings = None):
                 reaction = min(reaction, react_cap)
             p = Person(len(people), spot, reaction)
             p.t_queue = None
-            p.home = spot                     # their starting group (for MERGE)
+            p.home = spot                     # their starting group (for reporting)
             if informed:                      # nobody walks to a blocked door
                 p.known_blocked = set(blocked)
             people.append(p)
@@ -141,13 +143,13 @@ def run(seed=0, settings = None):
             if p.state == "waiting":
                 if t >= p.t_ready:
                     start_walking(p, queue, occupancy, rng, stair_time, power, informed, heading,
-                                  speed, speed_factor, h)
+                                  speed, speed_factor, h, doors)
             elif p.state == "walking":
                 p.t_escape -=DT
                 if p.t_escape <=0:
                     if p.next_node is None: # nowhere left to go
                         start_walking(p, queue, occupancy, rng, stair_time, power, informed, heading,
-                                  speed, speed_factor, h)
+                                  speed, speed_factor, h, doors)
                     else:
                         p.state = "queuing"
                         p.t_queue = t
@@ -205,7 +207,7 @@ def run(seed=0, settings = None):
                         p.visited.add(target)
                         p.t_queue = None
                         start_walking(p, queue, occupancy, rng, stair_time, power, informed, heading,
-                                  speed, speed_factor, h)
+                                  speed, speed_factor, h, doors)
                         if is_stair:
                             p.t_escape -= t - start   # the stair walk began at start
             

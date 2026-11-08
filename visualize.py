@@ -2,12 +2,13 @@
 visualize.py
 ------------
 Figures for the paper, built around the two scenario layers in scenarios.py
-(3 audiences x 7 events = 21 scenarios). Everything is saved in results/.
+(3 audiences x 8 events = 24 scenarios). Everything is saved in results/.
 
   network.png     the building as a network
   evacuation.png  people out over time: students vs concert vs concert + CM (all runs)
   evacuation_events.png  people out over time: one panel per audience, one line per event
-  summary.png     time until everyone (100%) and 95% are out, all 21 scenarios
+  compare_cm_cameras.png  students vs concert + Crowd Managers vs students + cameras
+  summary.png     time until everyone (100%) and 95% are out, all 24 scenarios
   spread.png      last-out time over RUNS runs: one panel per audience, one box per event
   exits.png       people per exit A-H: students vs concert vs concert + CM
 
@@ -183,11 +184,13 @@ def draw_evacuation(curves):
 #     one line per event (median over the runs), "no event" in black as reference
 # ---------------------------------------------------------------------------
 # one colour per event (colourblind-safe); "no event" = black reference line
-EVENT_PALETTE = ["#4c9be8", "#5cb88a", "#e9b949", "#e76f51", "#9b72cf", "#2bb5b8"]
+EVENT_PALETTE = ["#4c9be8", "#5cb88a", "#d65db1", "#e9b949", "#e76f51", "#9b72cf", "#8c5a3c"]
 EVENT_COLOR = {}
 for k, e in enumerate(e for e in EVENTS if e != "no event"):
     EVENT_COLOR[e] = EVENT_PALETTE[k % len(EVENT_PALETTE)]
 EVENT_COLOR["no event"] = BLACK
+EVENT_COLOR["LED"] = "#d65db1"       # pink
+EVENT_COLOR["cameras"] = "#5cb88a"   # green
 
 
 def draw_evacuation_events(curves):
@@ -220,7 +223,59 @@ def draw_evacuation_events(curves):
 
 
 # ---------------------------------------------------------------------------
-# 3. All 21 results in two grids: time until EVERYONE is out (100%) and until 95%
+# 2c. Students vs concert + CM (no event) vs students + cameras: people out over time,
+#     line = median, band = fastest to slowest run (like evacuation.png)
+# ---------------------------------------------------------------------------
+GREEN = "#2e9e5b"
+COMPARE = [("students", "no event", "students", BLUE),
+           ("concert + CM", "no event", "concert + CM", BLACK),
+           ("students", "cameras", "students + cameras", GREEN)]
+
+
+def draw_compare(curves, results):
+    grid = np.arange(0, max(max(c[-1] for c in curves[name(a, e)])
+                            for a, e, _, _ in COMPARE) + 10, 0.5)
+    fig, (ax, zoom) = plt.subplots(1, 2, figsize=(12, 5), width_ratios=[3, 2])
+    for aud, ev, label, color in COMPARE:
+        runs_ = curves[name(aud, ev)]
+        out = np.array([np.searchsorted(times, grid, side="right") for times in runs_])
+        med = np.median(out, axis=0)
+        n_band = until_done(out.min(axis=0))
+        n_med = until_done(med)
+        t100, _ = mean_and_ci([r["t_last"] for r in results[name(aud, ev)]])
+        t95, _ = mean_and_ci([r["t_95"] for r in results[name(aud, ev)]])
+        for a_ in (ax, zoom):
+            a_.fill_between(grid[:n_band], out.min(axis=0)[:n_band], out.max(axis=0)[:n_band],
+                            color=color, alpha=0.2, lw=0)
+            a_.plot(grid[:n_med], med[:n_med], color=color, lw=2.2, solid_capstyle="round",
+                    label=f"{label}: {t100:.0f} s (95%: {t95:.0f} s)")
+    ref = dict(color=MUTED, ls=(0, (4, 3)), lw=1, zorder=1)
+    for a_ in (ax, zoom):
+        a_.axhline(TOTAL, **ref)
+        a_.axvline(LIMIT, **ref)
+        a_.set_xlabel("Time since alarm (s)")
+    ax.text(2, TOTAL + 12, f"all {TOTAL} people out", fontsize=9, color=INK_2, va="bottom")
+    ax.text(LIMIT - 3, TOTAL * 0.04, f"{LIMIT} s requirement", ha="right",
+            fontsize=9, color=INK_2)
+    ax.set_xlim(0, grid[-1])
+    ax.set_ylim(0, TOTAL * 1.08)
+    ax.set_ylabel("People out of the building")
+    ax.set_title(f"All {TOTAL} people")
+    ax.legend(loc="lower right", bbox_to_anchor=(1, 0.1), handlelength=1.8,
+              title="everyone out (average)", title_fontsize=9, alignment="left",
+              frameon=True, facecolor="white", edgecolor="none", framealpha=1)
+    zoom.set_xlim(140, grid[-1])
+    zoom.set_ylim(TOTAL - 100, TOTAL + 5)
+    zoom.set_title("Zoom: the last 100 people")
+    zoom.text(LIMIT + 1.5, TOTAL - 96, f"{LIMIT} s", fontsize=9, color=INK_2)
+    fig.suptitle(f"Students vs concert + Crowd Managers vs students + cameras ({len(runs_)} runs: "
+                 "line = median, band = fastest to slowest run)", x=0.01, ha="left",
+                 fontsize=12, color=INK)
+    save(fig, "compare_cm_cameras.png")
+
+
+# ---------------------------------------------------------------------------
+# 3. All results in two grids: time until EVERYONE is out (100%) and until 95%
 #    are out. Colored by distance from 180 s (green = under, red = over).
 # ---------------------------------------------------------------------------
 def draw_summary(results, runs):
@@ -234,7 +289,7 @@ def draw_summary(results, runs):
     norm = TwoSlopeNorm(vcenter=LIMIT, vmin=min(min(allv), LIMIT - 1),
                         vmax=max(max(allv), LIMIT + 1))       # same colors in both grids
 
-    fig, axes = plt.subplots(2, 1, figsize=(11, 6.4))
+    fig, axes = plt.subplots(2, 1, figsize=(12.5, 6.4))
     for ax, (key, title) in zip(axes, panels):
         mean = [[m for m, _ in row] for row in stats[key]]
         im = ax.imshow(mean, cmap=GREEN_RED, norm=norm, aspect="auto")
@@ -255,7 +310,7 @@ def draw_summary(results, runs):
     cbar = fig.colorbar(im, ax=axes, fraction=0.025, pad=0.02)
     cbar.set_label("seconds; white = 180 s", color=INK_2)
     cbar.outline.set_visible(False)
-    fig.suptitle(f"All 21 scenarios (mean \u00b1 95% CI of {runs} runs)", x=0.01, ha="left",
+    fig.suptitle(f"All {len(SCENARIOS)} scenarios (mean \u00b1 95% CI of {runs} runs)", x=0.01, ha="left",
                  fontsize=12, color=INK)
     save(fig, "summary.png")
 
@@ -322,6 +377,7 @@ if __name__ == "__main__":
     draw_network()
     draw_evacuation(curves)
     draw_evacuation_events(curves)
+    draw_compare(curves, results)
     draw_summary(results, runs)
     draw_spread(results, runs)
     draw_exits(results)
