@@ -1,5 +1,5 @@
 """
-We model Baily Hall first floor into 16 spots (S1-S16) with 8 exists (A-H),
+We model Bailey Hall first floor into 16 spots (S1-S16) with 8 exits (A-H),
 and balcony into 6 spots (S17-S22) with 4 stairs (XYZW) connecting to first floor.
 
 Nodes: the spots, stairs, and exits.
@@ -9,11 +9,17 @@ Edges: spot -> exit, balcony spot (S17-S22) -> stair,
 Every node that holds people has an AREA (m^2):
 capacity = D_MAX * area
 crowd_speed = v(D), D = people/area 
-(SFPE: v = 1.4 (1 - 0.266 D), D = people per m^2, never below 0.2 m/s)
+(SFPE: v = 1.4 (1 - 0.266 D), D = people per m^2, never below 0.1 m/s,
+ never above the audience's free walking speed)
 
-We build two dictionaries the other files use:
-    INFO[place] -> facts about a place (kind, capacity, area, flow, seats)
-    NEXT[place] -> {place you can walk to next: seconds it takes}
+Dictionaries the other files use:
+    INFO[place]        -> facts about a place (kind, capacity, area, flow, lanes, seats)
+    NEXT[place]        -> {place you can walk to next: seconds it takes}
+    CM_NEXT[spot]      -> {any door: seconds}, direct routes (informed, all_doors=True)
+    CAMERA_NEXT[spot]  -> {any door: seconds}, own doors then along the wall
+                          (informed, all_doors=False)
+    TIME_TO_EXIT[place]-> fastest time to any exit in an empty building
+Stair times: 9.278 s (students, 0.97 m/s) and 20.455 s (concert, 0.44 m/s) for 9 m.
 """
 # ==================================================================
 # 1. Basic constants
@@ -194,7 +200,7 @@ for spot, stairs in BALCONY_STAIRS.items(): # balcony spot -> stair
 for stair, spots in STAIR_LANDS_IN.items(): # stair -> first-floor spot it lands in
     NEXT[stair] = {s: STAIR_TIME for s in spots}
 
-# Walking distance along the wall between two doors (used by cameras below,
+# Walking distance along the wall between two doors (used by CAMERA_NEXT below,
 # and by people who find a door blocked).
 def wall_distance(a, b):
     """Walking distance (m) along the wall between doors a and b."""
@@ -202,8 +208,8 @@ def wall_distance(a, b):
     return sum(WALL_DIST[(WALL_ORDER[k], WALL_ORDER[k + 1])] for k in range(i, j))
 
 # Distance (m) from each first-floor spot to EVERY door (team's measurements).
-# Used only by Crowd Managers ("all_doors": True): they know the direct route from
-# every spot to every open door.
+# Used by informed people with "all_doors": True (Crowd Managers, and the cameras event
+# in scenarios.py): they know the direct route from every spot to every open door.
 ALL_DOORS = {
     "S1":  {"A": 17, "B": 30, "C": 32, "D": 35, "E": 39, "F": 40, "G": 28, "H": 38},
     "S2":  {"A": 18, "B": 26, "C": 26, "D": 29, "E": 33, "F": 35, "G": 28, "H": 43},
@@ -225,9 +231,10 @@ ALL_DOORS = {
 CM_NEXT = {spot: {d: m / WALK_SPEED for d, m in doors.items()}   # seconds at WALK_SPEED
            for spot, doors in ALL_DOORS.items()}
 
-# Cameras know which doors are blocked and how crowded each door is, but not the
-# direct routes: any other door is reached via one of the spot's own exits e,
-# then along the wall:   distance = min over e of ( l_se + wall distance(e, d) )
+# Informed people with "all_doors": False know which doors are blocked and how crowded
+# each door is, but not the direct routes: any other door is reached via one of the
+# spot's own exits e, then along the wall:  distance = min over e of ( l_se + wall(e, d) )
+# (no scenario uses this at the moment; cameras now set "all_doors": True)
 CAMERA_NEXT = {spot: {d: min(m + wall_distance(e, d) for e, m in exits.items()) / WALK_SPEED
                       for d in WALL_ORDER}
                for spot, exits in SPOT_EXITS.items()}

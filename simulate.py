@@ -6,7 +6,10 @@ For each person:
   walking  -> t_escape counts down to 0 -> queuing
   queuing  -> next_node is an exit : go out if the door has room this step -> exited
            -> next_node is a stair : step onto it if it has room -> choose again
-           -> next_node is blocked : remember it, walk back -> choose again
+           -> next_node is blocked : remember it, walk along the wall to the nearest
+                                     open door on the left or right (by distance)
+Informed people (Crowd Managers / cameras) know the blocked doors from the start and
+judge doors by everyone walking to or queuing at them, not only the queue.
 """
 import math
 import random
@@ -73,18 +76,20 @@ def run(seed=0, settings = None):
     blocked = settings.get("blocked", set())
     stair_time = settings.get("stair_time", STAIR_TIME)  # seconds down one stair
     power = settings.get("power", Power)                 # how strongly people pick the faster option
-    informed = settings.get("informed", False)           # True: Crowd Managers tell everyone
-                                                         # which doors are blocked
-    all_doors = settings.get("all_doors", False)         # True: knows every spot -> door distance
-                                                         # (Crowd Managers); False: own doors, then
-                                                         # along the wall (cameras)
+    informed = settings.get("informed", False)           # True (Crowd Managers, cameras): blocked
+                                                         # doors known from the start, and doors
+                                                         # judged by everyone heading to them
+    all_doors = settings.get("all_doors", False)         # informed only. True: direct route from
+                                                         # every spot to every door (ALL_DOORS /
+                                                         # CM_NEXT); False: own doors, then along
+                                                         # the wall (CAMERA_NEXT)
     doors = CM_NEXT if all_doors else CAMERA_NEXT        # door options for informed people
-    react_cap = settings.get("react_cap", None)          # Crowd Managers prompt anyone who
-                                                         # hasn't moved by this time (s)
+    react_cap = settings.get("react_cap", None)          # everyone has started moving by this
+                                                         # time (s); one cap per audience
     react_mu = settings.get("react_mu", MU)              # reaction time ~ LogNormal(mu, sigma)
     react_sigma = settings.get("react_sigma", SIGMA)
     speed = settings.get("speed", WALK_SPEED)            # audience's free walking speed (m/s)
-    speed_factor = settings.get("speed_factor", 1.0)     # LED strips: walk 7.7% faster
+    speed_factor = settings.get("speed_factor", 1.0)     # LED strips: walk 3.14% faster (not stairs)
     hold = settings.get("hold", {})                      # {door: s}: door blocked for s seconds
                                                          # from when the first person reaches it
                                                          # (wheelchair in the doorway)

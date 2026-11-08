@@ -10,17 +10,22 @@ Each person stores:
     t_exit: the time they got out (None until then)
 
 How they choose path (logit model):
-for every node n they could go:FF
-    T(n) = walk time to n + fastest time from n to an exit + waiting time at n
+for every node n they could go:
+    T(n) = walk time to n + time from n to an exit + waiting time at n
+time from n to an exit = recomputed every step with the queues further along
+                         (dynamic, see dynamic_time_to_exit in building.py)
 waiting time = people queued at n / flow of n
-weight(n) = exp(-Power * T(n)) where faster options has bigger weight
+               (informed people - Crowd Managers, cameras - count everyone walking to
+                or queuing at n instead)
+weight(n) = exp(-Power * (T(n) - fastest T)), so faster options get bigger weights
 P(n) = weight(n) / sum of all weights
+Power is set per audience in scenarios.py (students 0.08, concert 0.23).
 
 node: the area they are in now 
     Floor 1: S1 ~ S16
     Balcony: S17 ~ S22
     Stairs: X->S16, Y->S14 or S13, Z->S13 or S12, W->S10
-    Exist: A ~ H
+    Exits: A ~ H
 """
 import math
 import random
@@ -29,7 +34,7 @@ from building import INFO, NEXT, TIME_TO_EXIT
 
 Power = 0.2 # per second: how strongly people prefer the faster option
             #   0    -> choose at random
-            #   0.2  -> baseline
+            #   0.2  -> default only; each audience sets its own "power" in scenarios.py
             #   1+   -> nearly everyone takes the fastest option
 
 class Person:

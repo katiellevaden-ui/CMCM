@@ -6,17 +6,16 @@ PART 1  SENSITIVITY (one input at a time, everything else at baseline)
     same seeds, so the difference comes from the input, not from luck
     (common random numbers). Tests:
         power beta           0.05, 0.072 (-10%), 0.088 (+10%), 0.30      (baseline 0.08)
-        reaction time        concert's lognormal instead of the students'
+        reaction time        lognormal x cap: concert / students, each with cap 60 s
+                             and with no cap                    (baseline students, cap 26 s)
         reaction cap         20 s, -10%, +10%, 200 s, no cap            (baseline 26 s)
-        stair descent        concert stair time 20.455 s                  (baseline 9.278 s)
-        walking speed        -10%, +10%, concert speed 1.056              (baseline 1.321 m/s)
+        stair descent        9.278 s (students), 20.455 s (concert)       (baseline 9.278 s)
+        walking speed        -20%, +20%                                   (baseline 1.321 m/s)
         door flow            -10%, +10% (SFPE coefficient 1.316)
         all distances        -10%, +10% (measurement error)
-        wheelchair hold      7.42 s (-10%), 9.08 s (+10%)   vs "students | wheelchair at D" (8.25 s)
-        LED speed-up         2.83% (-10%), 3.45% (+10%), 7.7% (old value)
-                                                            vs "students | LED" (3.14%)
-    -> results/sensitivity.csv, results/sensitivity_tornado.png
- 
+        wheelchair hold      7.42 s (-10%), 9.08 s (+10%) vs "students | wheelchair at D" (8.25 s)
+        LED speed-up         2.83% (-10%), 3.45% (+10%) vs "students | LED" (3.14%)
+
 PART 2  ROBUSTNESS (do the conclusions survive?)
     a) number of runs : how the 95% CI of "everyone out" shrinks with more runs
     b) time step      : DT = 0.5, 0.25, 0.1 s give the same answer
@@ -25,10 +24,6 @@ PART 2  ROBUSTNESS (do the conclusions survive?)
        and rerun students / concert / concert + CM (no event) with each combination.
        Checks: share of combinations under 180 s, and whether concert + CM is still
        faster than concert.
-    -> results/robustness.csv, results/robustness.png
- 
-Run:  python test.py          (full: about 1,240 runs; 5-20 min depending on cores)
-      python test.py quick    (a few minutes, fewer runs; for checking the code)
 """
 import copy
 import csv
@@ -45,7 +40,7 @@ import matplotlib.pyplot as plt
 import building
 import simulate
 from scenarios import SCENARIOS, AUDIENCES, mean_and_ci, incomplete
-from building import STAIR_TIME_CONCERT
+from building import STAIR_TIME_CONCERT, STAIR_TIME_LECTURE
  
 # ---------------------------------------------------------------------------
 # Settings
@@ -160,13 +155,20 @@ def sensitivity_tests():
     h = wheel["hold"]["D"]
     sf = led["speed_factor"] - 1
     cap = s["react_cap"]                  # the students' own cap (scenarios.py)
+    conc_react = {"react_mu": concert["react_mu"], "react_sigma": concert["react_sigma"]}
     tests = [
         ("Power β (0.08)", "β = 0.05", BASE, {**s, "power": 0.05}),
         ("Power β (0.08)", "β = 0.072 (−10%)", BASE, {**s, "power": 0.072}),
         ("Power β (0.08)", "β = 0.088 (+10%)", BASE, {**s, "power": 0.088}),
         ("Power β (0.08)", "β = 0.30", BASE, {**s, "power": 0.30}),
-        ("Reaction time", "concert lognormal (mean 32.5 s)", BASE,
-         {**s, "react_mu": concert["react_mu"], "react_sigma": concert["react_sigma"]}),
+        (f"Reaction time (students, cap {cap:g} s)", "concert lognormal, cap 60 s", BASE,
+         {**s, **conc_react, "react_cap": 60}),
+        (f"Reaction time (students, cap {cap:g} s)", "students lognormal, cap 60 s", BASE,
+         {**s, "react_cap": 60}),
+        (f"Reaction time (students, cap {cap:g} s)", "concert lognormal, no cap", BASE,
+         {**s, **conc_react, "react_cap": None}),
+        (f"Reaction time (students, cap {cap:g} s)", "students lognormal, no cap", BASE,
+         {**s, "react_cap": None}),
         (f"Reaction cap ({cap:g} s)", "cap 20 s", BASE, {**s, "react_cap": 20}),
         (f"Reaction cap ({cap:g} s)", f"cap {cap * 0.9:.1f} s (−10%)", BASE,
          {**s, "react_cap": cap * 0.9}),
@@ -174,12 +176,12 @@ def sensitivity_tests():
          {**s, "react_cap": cap * 1.1}),
         (f"Reaction cap ({cap:g} s)", "cap 200 s", BASE, {**s, "react_cap": 200}),
         (f"Reaction cap ({cap:g} s)", "no cap", BASE, {**s, "react_cap": None}),
-        (f"Stair descent ({s['stair_time']:.3f} s)", f"concert stair {STAIR_TIME_CONCERT:.3f} s", BASE,
-         {**s, "stair_time": STAIR_TIME_CONCERT}),
-        ("Walking speed (1.321 m/s)", "−10%", BASE, {**s, "speed": s["speed"] * 0.9}),
-        ("Walking speed (1.321 m/s)", "+10%", BASE, {**s, "speed": s["speed"] * 1.1}),
-        ("Walking speed (1.321 m/s)", "concert 1.056 m/s (−20%)", BASE,
-         {**s, "speed": concert["speed"]}),
+        (f"Stair descent ({s['stair_time']:.3f} s)", f"{STAIR_TIME_LECTURE:.3f} s (students)",
+         BASE, {**s, "stair_time": STAIR_TIME_LECTURE}),
+        (f"Stair descent ({s['stair_time']:.3f} s)", f"{STAIR_TIME_CONCERT:.3f} s (concert)",
+         BASE, {**s, "stair_time": STAIR_TIME_CONCERT}),
+        (f"Walking speed ({s['speed']} m/s)", "−20%", BASE, {**s, "speed": s["speed"] * 0.8}),
+        (f"Walking speed ({s['speed']} m/s)", "+20%", BASE, {**s, "speed": s["speed"] * 1.2}),
         ("Door flow (1.316 /s/m)", "−10%", BASE, s, 0.9, None),
         ("Door flow (1.316 /s/m)", "+10%", BASE, s, 1.1, None),
         ("All distances", "−10%", BASE, s, 1.0, 0.9),
@@ -192,8 +194,6 @@ def sensitivity_tests():
          {**led, "speed_factor": 1 + sf * 0.9}),
         (f"LED (+{sf:.2%})", f"+{sf * 1.1:.2%} (+10%)", "students | LED",
          {**led, "speed_factor": 1 + sf * 1.1}),
-        (f"LED (+{sf:.2%})", "+7.7% (old value)", "students | LED",
-         {**led, "speed_factor": 1.077}),
     ]
     # pad to (group, label, base, settings, door, dist)
     return [t + (1.0, None) if len(t) == 4 else t for t in tests]
