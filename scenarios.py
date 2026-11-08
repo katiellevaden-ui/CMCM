@@ -12,8 +12,9 @@ from building import STAIR_TIME_LECTURE, STAIR_TIME_CONCERT
 #   speed = free walking speed (m/s), stair_time = seconds down one stair,
 #   power = how strongly people pick the faster option (beta)
 # ------------------------------------------------------------------
-REACT_CAP = 60   # s: everyone has started moving by then. PLACEHOLDER, needs a reason
-                 # (cuts ~0.1% of students', ~7% of concert and ~2% of concert + CM reaction times)
+# s: everyone has started moving by then (one cap per audience)
+# (cuts ~5.5% of students' and ~0.002% of concert / concert + CM reaction times)
+REACT_CAP = {"students": 26, "concert": 224, "concert + CM": 168}
 
 DYNAMIC = True   # recompute the time to exit every step, with queues further along
                  # (dynamic Dijkstra / Bellman, see dynamic_time_to_exit in building.py)
@@ -21,13 +22,13 @@ DYNAMIC = True   # recompute the time to exit every step, with queues further al
 AUDIENCES = {
     "students":     {"react_mu": 2.418, "react_sigma": 0.527, "speed": 1.321,
                      "stair_time": STAIR_TIME_LECTURE, "power": 0.08,
-                     "react_cap": REACT_CAP, "dynamic": DYNAMIC},
+                     "react_cap": REACT_CAP["students"], "dynamic": DYNAMIC},
     "concert":      {"react_mu": 3.358, "react_sigma": 0.497, "speed": 1.056,
                      "stair_time": STAIR_TIME_CONCERT, "power": 0.23,
-                     "react_cap": REACT_CAP, "dynamic": DYNAMIC},
+                     "react_cap": REACT_CAP["concert"], "dynamic": DYNAMIC},
     "concert + CM": {"react_mu": 3.070, "react_sigma": 0.497, "speed": 1.056,
                      "stair_time": STAIR_TIME_CONCERT, "power": 0.23, "informed": True, "all_doors": True,
-                     "react_cap": REACT_CAP, "dynamic": DYNAMIC},
+                     "react_cap": REACT_CAP["concert + CM"], "dynamic": DYNAMIC},
 }
 
 # ------------------------------------------------------------------
@@ -59,16 +60,27 @@ def run_scenario(settings, runs = RUNS):
     return [summary(run(seed, settings)) for seed in range(runs)]
 
 def mean_and_ci(values):
+    """Mean and 95% CI half-width. Runs that never reached the time (None) are left
+    out; count them with incomplete(values). Returns (nan, nan) if fewer than 2 remain."""
+    values = [v for v in values if v is not None]
     R = len(values)
+    if R < 2:
+        return (values[0] if R else float("nan")), float("nan")
     mean = sum(values) / R
     sd = math.sqrt(sum((v - mean)** 2 for v in values)/ (R-1))
     return mean, 1.96*sd/math.sqrt(R)
 
+
+def incomplete(values):
+    """How many runs never reached the time (still people inside at T_MAX)."""
+    return sum(v is None for v in values)
+
 if __name__ == "__main__":
-    print(f"{'scenario':32s} {'last out (s)':>18s} {'95% out (s)':>18s} {'stuck':>6s}")
+    print(f"{'scenario':32s} {'last out (s)':>18s} {'95% out (s)':>18s} {'stuck':>6s} {'incomplete runs':>16s}")
     for name, settings in SCENARIOS.items():
         results = run_scenario(settings)
         last, last_ci = mean_and_ci([r["t_last"] for r in results])
         p95, p95_ci = mean_and_ci([r["t_95"] for r in results])
         stuck = sum(r["stuck"] for r in results)
-        print(f"{name:32s} {last:9.1f} +- {last_ci:4.1f} {p95:9.1f} +- {p95_ci:4.1f} {stuck:6d}")
+        bad = incomplete([r["t_last"] for r in results])
+        print(f"{name:32s} {last:9.1f} +- {last_ci:4.1f} {p95:9.1f} +- {p95_ci:4.1f} {stuck:6d} {bad:16d}")

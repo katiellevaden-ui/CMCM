@@ -258,13 +258,17 @@ for spot in BALCONY_STAIRS: # balcony: walk to a stair, then as above
 #     h_b = min_x [ s*c_bx + Q_x/f_x + h_x ]             (balcony spot)
 # s = walking-time scale of this audience, tau = this scenario's stair time.
 # ==================================================================
-def dynamic_time_to_exit(queue, scale=1.0, stair_time=STAIR_TIME):
+def dynamic_time_to_exit(queue, scale=1.0, stair_time=STAIR_TIME, doors=None, blocked=()):
+    """doors:   door options informed people use (CM_NEXT); None = the spot's own doors (NEXT)
+    blocked: doors informed people know are blocked; left out of the estimate"""
     def wait(n):                         # expected wait at a bottleneck
         return queue.get(n, 0) / INFO[n]["flow"]
 
     h = {e: 0.0 for e in "ABCDEFGH"}
     for spot in SPOT_EXITS:
-        h[spot] = min(scale * t + wait(e) for e, t in NEXT[spot].items())
+        options = doors[spot] if doors is not None else NEXT[spot]
+        h[spot] = min((scale * t + wait(e) for e, t in options.items() if e not in blocked),
+                      default=float("inf"))          # inf: every door from here is blocked
     for stair, shares in STAIR_LANDS_IN.items():   # expected over where you land
         h[stair] = stair_time + sum(w * h[s] for s, w in shares.items())
     for spot in BALCONY_STAIRS:

@@ -138,7 +138,7 @@ def draw_evacuation(curves):
         runs_ = curves[name(aud, "no event")]
         # people out by time t, for every run: count of exit times <= t
         out = np.array([np.searchsorted(times, grid, side="right") for times in runs_])
-        last = [times[-1] for times in runs_]                    # 100% time of each run
+        last = [times[-1] for times in runs_ if len(times) == TOTAL]   # 100% time (complete runs)
         color = AUDIENCE_COLOR[aud]
         med = np.median(out, axis=0)
         n_band = until_done(out.min(axis=0))     # band ends when the slowest run is done
@@ -326,7 +326,8 @@ BOX_COLOR = {"students": BLUE, "concert": PINK, "concert + CM": "#8b8b96"}
 def draw_spread(results, runs):
     fig, axes = plt.subplots(1, len(AUDIENCES), figsize=(14, 4.6), sharey=True)
     for ax, aud in zip(axes, AUDIENCES):
-        data = [[r["t_last"] for r in results[name(aud, ev)]] for ev in EVENTS]
+        data = [[r["t_last"] for r in results[name(aud, ev)] if r["t_last"] is not None]
+                for ev in EVENTS]                     # incomplete runs left out
         box = ax.boxplot(data, patch_artist=True, widths=0.6,
                          medianprops=dict(color=INK, lw=1.4),
                          whiskerprops=dict(color=MUTED), capprops=dict(color=MUTED),

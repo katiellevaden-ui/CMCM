@@ -133,7 +133,9 @@ def run(seed=0, settings = None):
         # dynamic time to exit (Managers see everyone heading to a door, others see lines)
         h = None
         if dynamic:
-            h = dynamic_time_to_exit(heading if informed else queue, scale, stair_time)
+            h = dynamic_time_to_exit(heading if informed else queue, scale, stair_time,
+                                     doors if informed else None,        # informed: their routes
+                                     blocked if informed else ())        # and known closures
 
         # Queuing people FIFO
         inside.sort(key=lambda p: p.t_queue if p.state == "queuing" else float("inf"))
@@ -225,15 +227,19 @@ def run(seed=0, settings = None):
 
         
 def summary(people):
+    """Times are measured against EVERYONE who started (N), not only those who got out.
+    A time that was never reached (people still inside at T_MAX) is None."""
+    N = len(people)
     times = sorted(p.t_exit for p in people if p.t_exit is not None)
+    n95 = math.ceil(0.95 * N)                     # 95% of 1326 = 1259.7 -> 1260th person
     exit_use = {}
     for p in people:
         if p.state == "exited":
             exit_use[p.next_node] = exit_use.get(p.next_node, 0) +1
     return {
-        "stuck": len(people) - len(times), 
-        "t_last": times[-1],
-        "t_95":times[int(0.95 * len(times)) - 1], # 95% of people out(s)
+        "stuck": N - len(times),
+        "t_last": times[-1] if len(times) == N else None,       # everyone out (s)
+        "t_95": times[n95 - 1] if len(times) >= n95 else None,  # 95% of people out (s)
         "exit_use": dict(sorted(exit_use.items())),
     }
 

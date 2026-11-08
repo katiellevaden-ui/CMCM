@@ -1,0 +1,29 @@
+check,scenario,value
+runs = 10,students | no event,176.0 ± 2.5 s
+runs = 20,students | no event,176.1 ± 1.4 s
+runs = 60,students | no event,176.0 ± 0.8 s
+DT = 0.5 s,students | no event,173.6 ± 2.1 s
+DT = 0.25 s,students | no event,176.0 ± 2.5 s
+DT = 0.1 s,students | no event,176.5 ± 1.9 s
+Monte Carlo: combinations <= 180 s,students | no event,70%
+Monte Carlo: range of means,students | no event,161.2 - 193.3 s
+Monte Carlo: incomplete runs,students | no event,0
+runs = 10,concert | no event,189.4 ± 11.4 s
+runs = 20,concert | no event,190.2 ± 9.3 s
+runs = 60,concert | no event,185.3 ± 4.2 s
+DT = 0.5 s,concert | no event,190.6 ± 11.1 s
+DT = 0.25 s,concert | no event,189.4 ± 11.4 s
+DT = 0.1 s,concert | no event,189.3 ± 11.3 s
+Monte Carlo: combinations <= 180 s,concert | no event,3%
+Monte Carlo: range of means,concert | no event,175.1 - 207.6 s
+Monte Carlo: incomplete runs,concert | no event,0
+runs = 10,concert + CM | no event,166.0 ± 4.9 s
+runs = 20,concert + CM | no event,165.9 ± 3.5 s
+runs = 60,concert + CM | no event,163.5 ± 1.5 s
+DT = 0.5 s,concert + CM | no event,166.3 ± 5.0 s
+DT = 0.25 s,concert + CM | no event,166.0 ± 4.9 s
+DT = 0.1 s,concert + CM | no event,165.9 ± 4.7 s
+Monte Carlo: combinations <= 180 s,concert + CM | no event,93%
+Monte Carlo: range of means,concert + CM | no event,156.4 - 181.6 s
+Monte Carlo: incomplete runs,concert + CM | no event,0
+Monte Carlo: concert + CM faster than concert,,100%

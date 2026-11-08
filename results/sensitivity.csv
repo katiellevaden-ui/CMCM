@@ -1,0 +1,24 @@
+group,test,baseline scenario,everyone out (s),change (s),change 95% CI (s),95% out (s),change (s),change 95% CI (s),share of runs <= 180 s,people stuck,incomplete runs
+Power β (0.08),β = 0.05,students | no event,178.8,+2.8,1.2,145.4,+1.7,0.6,60%,0,0
+Power β (0.08),β = 0.072 (−10%),students | no event,176.3,+0.2,0.6,143.9,+0.2,0.2,90%,0,0
+Power β (0.08),β = 0.088 (+10%),students | no event,175.8,-0.3,0.6,143.4,-0.3,0.2,90%,0,0
+Power β (0.08),β = 0.30,students | no event,173.4,-2.6,2.0,142.9,-0.8,1.3,100%,0,0
+Reaction time,concert lognormal (mean 32.5 s),students | no event,182.8,+6.8,2.2,152.0,+8.3,1.1,30%,0,0
+Reaction cap (26 s),cap 20 s,students | no event,177.1,+1.0,1.3,144.2,+0.5,0.6,80%,0,0
+Reaction cap (26 s),cap 23.4 s (−10%),students | no event,176.8,+0.8,1.1,143.8,+0.1,0.5,80%,0,0
+Reaction cap (26 s),cap 28.6 s (+10%),students | no event,176.1,+0.0,0.9,143.4,-0.3,0.3,85%,0,0
+Reaction cap (26 s),cap 200 s,students | no event,175.0,-1.1,1.0,143.2,-0.5,0.5,95%,0,0
+Reaction cap (26 s),no cap,students | no event,175.0,-1.1,1.0,143.2,-0.5,0.5,95%,0,0
+Stair descent (9.278 s),concert stair 20.455 s,students | no event,176.3,+0.2,1.4,143.3,-0.4,0.5,85%,0,0
+Walking speed (1.321 m/s),−10%,students | no event,176.2,+0.1,0.7,143.6,-0.1,0.2,90%,0,0
+Walking speed (1.321 m/s),+10%,students | no event,176.0,-0.0,0.7,143.5,-0.1,0.2,90%,0,0
+Walking speed (1.321 m/s),concert 1.056 m/s (−20%),students | no event,176.5,+0.4,0.8,143.2,-0.4,0.3,90%,0,0
+Door flow (1.316 /s/m),−10%,students | no event,193.2,+17.1,0.5,157.1,+13.4,0.3,0%,0,0
+Door flow (1.316 /s/m),+10%,students | no event,162.2,-13.9,0.4,132.8,-10.9,0.4,100%,0,0
+All distances,−10%,students | no event,173.7,-2.3,1.4,141.6,-2.1,1.1,100%,0,0
+All distances,+10%,students | no event,178.1,+2.1,1.6,145.3,+1.6,1.1,65%,0,0
+Wheelchair at D (8.25 s),7.42 s (−10%),students | wheelchair at D,176.3,-0.1,0.2,144.3,-0.2,0.1,90%,0,0
+Wheelchair at D (8.25 s),9.08 s (+10%),students | wheelchair at D,176.4,+0.0,0.0,144.6,+0.2,0.2,90%,0,0
+LED (+3.14%),+2.83% (−10%),students | LED,175.5,+0.3,0.3,143.3,+0.2,0.1,90%,0,0
+LED (+3.14%),+3.45% (+10%),students | LED,175.1,-0.1,0.2,143.1,-0.0,0.1,85%,0,0
+LED (+3.14%),+7.7% (old value),students | LED,174.4,-0.8,1.6,142.3,-0.9,0.9,100%,0,0
