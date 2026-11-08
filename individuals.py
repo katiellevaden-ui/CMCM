@@ -18,7 +18,8 @@ P(n) = weight(n) / sum of all weights
 
 node: the area they are in now 
     Floor 1: S1 ~ S16
-    Stairs: X->A, Y->C,D,E, Z->C,D,E, W->G,H
+    Balcony: S17 ~ S22
+    Stairs: X->S16, Y->S14 or S13, Z->S13 or S12, W->S10
     Exist: A ~ H
 """
 import math
@@ -70,14 +71,21 @@ class Person:
     def __repr__(self):
         return f"Person({self.id}, {self.state}, in {self.node}, -> {self.next_node})"
 
-def choose_next(node, queue, blocked = (), power = Power, rng = random):
+def choose_next(node, queue, blocked = (), power = Power, rng = random, choices = None,
+                scale = 1.0):
     """Pick the next node with probability proportional to exp(-Power * T(n)).
-    Nodes in `blocked` are not considered. Returns None if there is nowhere to go."""
+    Nodes in `blocked` are not considered. Returns None if there is nowhere to go.
+    choices: optional {node: walk time (s)} to use instead of NEXT[node]
+             (e.g. the doors along the wall after finding a door blocked).
+    scale: multiplies the walking part of T, to convert times computed at WALK_SPEED
+           into this audience's speed (1.24 / speed)."""
+    if choices is None:
+        choices = NEXT[node]
     options, times = [], []
-    for n in NEXT[node]:
+    for n in choices:
         if n in blocked:
             continue
-        T = NEXT[node][n] + TIME_TO_EXIT[n]
+        T = scale * (choices[n] + TIME_TO_EXIT[n])
         flow = INFO[n]["flow"]
         if flow is not None:
             T += queue.get(n, 0)/ flow # waiting time at n, use 0 if there is no queue

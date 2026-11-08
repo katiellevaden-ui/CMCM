@@ -3,7 +3,8 @@ We model Baily Hall first floor into 16 spots (S1-S16) with 8 exists (A-H),
 and balcony into 6 spots (S17-S22) with 4 stairs (XYZW) connecting to first floor.
 
 Nodes: the spots, stairs, and exits.
-Edges: spot-> exit, spot(S17-S22)->stairs, staris->exits(X->A, Y->C,D,E, Z->C,D,E, W->G,H)
+Edges: spot -> exit, balcony spot (S17-S22) -> stair,
+       stair -> first-floor spot it lands in (X->S16, Y->S14/S13, Z->S13/S12, W->S10)
 
 Every node that holds people has an AREA (m^2):
 capacity = D_MAX * area
@@ -17,9 +18,12 @@ We build two dictionaries the other files use:
 # ==================================================================
 # 1. Basic constants
 # ==================================================================
-WALK_SPEED = 1.24 # m/s, (Seyfried et al. 2005)
+WALK_SPEED = 1.61 # m/s, (Seyfried et al. 2005)
 MAX_DENSITY = 3.8     # people per m^2 at which a crowd stops moving (SFPE)
-STAIR_TIME  = 20.0    # seconds to walk down one balcony stair (team estimate)
+# Time to walk down one balcony stair = stair length / stair descent speed
+STAIR_TIME_LECTURE = 9 / 0.97   # 9.28 s  (0.97 m/s, Rafi et al. 2023 university drill)
+STAIR_TIME_CONCERT = 9 / 0.44   # 20.45 s (0.44 m/s, Peacock et al., NIST)
+STAIR_TIME = STAIR_TIME_LECTURE # default; each scenario sets its own "stair_time"
 SQFT        = 0.0929  # 1 square foot in m^2
 
 # Whole-floor areas printed on the floor plans (used only as a sanity check)
@@ -30,56 +34,84 @@ GROSS_AREA = {1: 18602 * SQFT,    # first floor  = 1728 m^2
 # 2. First floor: which exits each spot can use, and how far (m)
 # ==================================================================
 SPOT_EXITS = {
-    "S1":  {"A": 17},
-    "S2":  {"A": 20, "B": 14},
-    "S3":  {"B": 9,  "C": 12},
-    "S4":  {"A": 23, "G": 24, "H": 28},
-    "S5":  {"C": 20, "D": 22, "E": 20},
-    "S6":  {"C": 13, "D": 15, "E": 13},
-    "S7":  {"G": 16, "H": 22},
-    "S8":  {"F": 15, "G": 15},
-    "S9":  {"E": 13, "F": 9},
-    "S10": {"G": 6,  "H": 19},
-    "S11": {"F": 11, "G": 8},
-    "S12": {"E": 12, "F": 5},
-    "S13": {"C": 7,  "D": 4, "E": 7},
-    "S14": {"B": 4,  "C": 11},
-    "S15": {"A": 9,  "B": 15},
-    "S16": {"A": 7},
+    "S1":  {"A": 17, "B": 31},
+    "S2":  {"A": 15, "B": 24},
+    "S3":  {"B": 18, "C": 22},
+    "S4":  {"A": 25, "G": 24, "H": 35},
+    "S5":  {"C": 30, "D": 29, "E": 31},
+    "S6":  {"C": 24, "D": 22, "E": 25},
+    "S7":  {"G": 15, "H": 27},
+    "S8":  {"F": 20, "G": 14},
+    "S9":  {"E": 24, "F": 18},
+    "S10": {"G": 10, "H": 23},
+    "S11": {"F": 15, "G": 10},
+    "S12": {"E": 21, "F": 17},
+    "S13": {"C": 10, "D": 8, "E": 11},
+    "S14": {"B": 14, "C": 21},
+    "S15": {"A": 11, "B": 18},
+    "S16": {"A": 11, "B": 28},
 }
 
 # ==================================================================
-# 3. Balcony: We split each route into two parts so a stair can be a shared bottleneck
-#     BALCONY_STAIRS : seat -> top of stair (m)
-#     STAIR_EXITS    : bottom of stair -> exit (m), plus STAIR_TIME on the stair
+# 3. Balcony, in two layers:
+#     layer 1  BALCONY_STAIRS : balcony spot -> top of a stair (m), chosen by distance (logit)
+#     layer 2  STAIR_LANDS_IN : after walking down (STAIR_TIME), people join one of
+#                               these first-floor spots, equally likely, and leave
+#                               through that spot's exits with everyone else
 # ==================================================================
-STAIR_EXITS = {
-    "X": {"A": 7},
-    "Y": {"C": 7, "D": 11, "E": 14},
-    "Z": {"C": 14, "D": 11, "E": 7},
-    "W": {"G": 6, "H": 9},
-}
- 
-BALCONY_STAIRS = {
-    "S17": {"X": 14},
-    "S18": {"X": 22, "Y": 25},
-    "S19": {"Y": 18, "Z": 31},
-    "S20": {"Y": 13, "Z": 21},
-    "S21": {"Y": 20, "Z": 14},
-    "S22": {"W": 16},
+BALCONY_STAIRS = {            # team's measurements (m)
+    "S17": {"X": 9.3},
+    "S18": {"X": 21.6, "Y": 10.2},
+    "S19": {"Y": 9.0, "Z": 20.7},
+    "S20": {"Y": 20.9, "Z": 8.9},
+    "S21": {"W": 21.2, "Z": 10.4},
+    "S22": {"W": 8.9},
 }
 
-MEASURED_ROUTES = {
-    "S17": {("X", "A"): 21},
-    "S18": {("X", "A"): 29, ("Y", "C"): 32, ("Y", "D"): 36, ("Y", "E"): 39},
-    "S19": {("Y", "C"): 25, ("Y", "D"): 29, ("Y", "E"): 33,
-            ("Z", "C"): 45, ("Z", "D"): 42, ("Z", "E"): 38},
-    "S20": {("Y", "C"): 20, ("Y", "D"): 24, ("Y", "E"): 27,
-            ("Z", "C"): 35, ("Z", "D"): 32, ("Z", "E"): 28},
-    "S21": {("Y", "C"): 27, ("Y", "D"): 31, ("Y", "E"): 34,
-            ("Z", "C"): 28, ("Z", "D"): 24, ("Z", "E"): 21},
-    "S22": {("W", "G"): 22, ("W", "H"): 25},
+# Where each balcony group merges on the first floor (team's percentages).
+# After going down stair w, a person lands in spot s with probability
+#   MERGE[group][s] restricted to the spots that stair reaches, renormalised.
+MERGE = {
+    "S17": {"S16": 100},
+    "S18": {"S16": 50, "S14": 50},
+    "S19": {"S14": 40, "S13": 40, "S12": 20},
+    "S20": {"S14": 20, "S13": 40, "S12": 40},
+    "S21": {"S10": 50, "S12": 50},
+    "S22": {"S10": 100},
 }
+
+STAIR_LANDS_IN = {
+    "X": ["S16"],
+    "Y": ["S14", "S13"],
+    "Z": ["S13", "S12"],
+    "W": ["S10"],
+}
+
+# ==================================================================
+# 3b. Doors along the semicircle wall (team estimates, m).
+#     A blocked door sends people along the wall to the next door.
+# ==================================================================
+WALL_ORDER = ["A", "B", "C", "D", "E", "F", "G", "H"]
+WALL_DIST = {("A", "B"): 17.8, ("B", "C"): 15.1, ("C", "D"): 3.4, ("D", "E"): 3.8,
+             ("E", "F"): 17.4, ("F", "G"): 14.9, ("G", "H"): 22.8}
+
+
+def wall_options(door, known_blocked):
+    """From a blocked `door`, the nearest door in each direction along the wall that
+    is not known to be blocked, with the walking distance (m) to it.
+    Example: from D with C known blocked -> {"B": 3.4 + 15.1, "E": 3.8}"""
+    options = {}
+    k = WALL_ORDER.index(door)
+    for step in (-1, +1):                       # left, then right
+        dist, i = 0.0, k
+        while 0 <= i + step < len(WALL_ORDER):
+            a, b = sorted((WALL_ORDER[i], WALL_ORDER[i + step]))
+            dist += WALL_DIST[(a, b)]
+            i += step
+            if WALL_ORDER[i] not in known_blocked:
+                options[WALL_ORDER[i]] = dist
+                break
+    return options
 
 # ==================================================================
 # 4. People per spot
@@ -97,8 +129,13 @@ SEATS = {
 # ==================================================================
 SEAT_AREA   = 7 * SQFT    # 0.65 m^2 per seated person (building-code value)
 AISLE_EXTRA = 15          # PLACEHOLDER: m^2 of aisle in each spot
-STAIR_AREA  = 1.2 * 10    # PLACEHOLDER: stair 1.2 m wide x 10 m long
-EXIT_WIDTH  = 1.5         # PLACEHOLDER: clear width of each exit door (m)
+STAIR_AREA  = 1.2 * 9     # PLACEHOLDER: stair 1.2 m wide x 9 m long
+# Exits: how many people can go through each door side by side (team's measurement),
+# and how long one person occupies a lane before the next can follow
+EXIT_LANES = {"A": 2, "B": 2, "C": 3, "D": 3, "E": 3, "F": 2, "G": 2, "H": 2}
+# Measured clear widths (m); SFPE flow = 1.316 * (width - 0.3) people/s
+EXIT_WIDTH = {"A": 1.1, "B": 1.1, "C": 1.7, "D": 1.7, "E": 1.7, "F": 1.1, "G": 1.1, "H": 1.1}
+SPECIFIC_FLOW = 1.316   # people / s / m of effective width (SFPE hydraulic model)
 STAIR_WIDTH = 1.2         # PLACEHOLDER: width of each stair (m)
 
 # ==================================================================
@@ -111,13 +148,13 @@ def door_flow(width, people_per_meter):
     return people_per_meter * (width - 0.3)
  
  
-def crowd_speed(people, area):
+def crowd_speed(people, area, v_max=WALK_SPEED):
     """Walking speed (m/s) when `people` share `area` m^2.
     The more crowded, the slower: v = 1.4 * (1 - 0.266 * density).
-    Never faster than WALK_SPEED, never slower than 0.1 m/s."""
+    Never faster than v_max (the audience's free speed), never slower than 0.1 m/s."""
     density = people / area
     v = 1.4 * (1 - 0.266 * density)
-    return max(0.1, min(WALK_SPEED, v))
+    return max(0.1, min(v_max, v))
 
 # ==================================================================
 # 7. Build INFO: facts about each node
@@ -127,10 +164,14 @@ INFO = {}
 for exit_name in "ABCDEFGH":
     INFO[exit_name] = {
         "kind": "exit",
-        "flow": door_flow(EXIT_WIDTH, 1.3) # people/sec through the door
+        "lanes": EXIT_LANES[exit_name],                          # people through at once
+        "flow": door_flow(EXIT_WIDTH[exit_name], SPECIFIC_FLOW), # people/s (SFPE)
+        # each person occupies a lane for t_pass = lanes / flow, so the door passes exactly
+        # its SFPE flow: C, D, E 3 / 1.84 = 1.63 s;  others 2 / 1.05 = 1.90 s
+        "t_pass": EXIT_LANES[exit_name] / door_flow(EXIT_WIDTH[exit_name], SPECIFIC_FLOW),
     }
 
-for stair in STAIR_EXITS:
+for stair in STAIR_LANDS_IN:
     INFO[stair] = {
         "kind": "stair",
         "flow": door_flow(STAIR_WIDTH, 1.0), # people/sec onto the stair
@@ -159,8 +200,21 @@ for spot, exits in SPOT_EXITS.items():  # spot -> exit
 for spot, stairs in BALCONY_STAIRS.items(): # balcony spot -> stair
     NEXT[spot] = {t: meters / WALK_SPEED for t, meters in stairs.items()}
  
-for stair, exits in STAIR_EXITS.items(): # stair -> exit
-    NEXT[stair] = {e: STAIR_TIME + meters / WALK_SPEED for e, meters in exits.items()}
+for stair, spots in STAIR_LANDS_IN.items(): # stair -> first-floor spot it lands in
+    NEXT[stair] = {s: STAIR_TIME for s in spots}
+
+# Crowd Managers know every door. From a first-floor spot, any door d can be reached by
+# walking to one of the spot's own exits e, then along the wall from e to d:
+#     distance = min over e of ( l_se + wall distance(e, d) )
+def wall_distance(a, b):
+    """Walking distance (m) along the wall between doors a and b."""
+    i, j = sorted((WALL_ORDER.index(a), WALL_ORDER.index(b)))
+    return sum(WALL_DIST[(WALL_ORDER[k], WALL_ORDER[k + 1])] for k in range(i, j))
+
+CM_NEXT = {}   # spot -> {any door: seconds to walk there}, used only with Crowd Managers
+for spot, exits in SPOT_EXITS.items():
+    CM_NEXT[spot] = {d: min(m + wall_distance(e, d) for e, m in exits.items()) / WALK_SPEED
+                     for d in WALL_ORDER}
 
 # ==================================================================
 # 9. Fastest time from each place to ANY exit (with nobody in the way)
@@ -172,8 +226,9 @@ TIME_TO_EXIT = {e: 0.0 for e in "ABCDEFGH"}
 for spot in SPOT_EXITS: # first floor: the quickest of its exits
     TIME_TO_EXIT[spot] = min(NEXT[spot].values())
  
-for stair in STAIR_EXITS: # stair: go down, then the quickest of its exits
-    TIME_TO_EXIT[stair] = min(NEXT[stair].values())
+for stair in STAIR_LANDS_IN: # stair: go down, land in one of its spots (equally likely)
+    spots = STAIR_LANDS_IN[stair]
+    TIME_TO_EXIT[stair] = STAIR_TIME + sum(TIME_TO_EXIT[s] for s in spots) / len(spots)
  
 for spot in BALCONY_STAIRS: # balcony: walk to a stair, then as above
     TIME_TO_EXIT[spot] = min(t + TIME_TO_EXIT[stair] for stair, t in NEXT[spot].items())
