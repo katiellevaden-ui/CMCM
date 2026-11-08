@@ -10,7 +10,7 @@ Each person stores:
     t_exit: the time they got out (None until then)
 
 How they choose path (logit model):
-for every node n they could go:
+for every node n they could go:FF
     T(n) = walk time to n + fastest time from n to an exit + waiting time at n
 waiting time = people queued at n / flow of n
 weight(n) = exp(-Power * T(n)) where faster options has bigger weight
@@ -72,7 +72,7 @@ class Person:
         return f"Person({self.id}, {self.state}, in {self.node}, -> {self.next_node})"
 
 def choose_next(node, queue, blocked = (), power = Power, rng = random, choices = None,
-                scale = 1.0):
+                scale = 1.0, h = None):
     """Pick the next node with probability proportional to exp(-Power * T(n)).
     Nodes in `blocked` are not considered. Returns None if there is nowhere to go.
     choices: optional {node: walk time (s)} to use instead of NEXT[node]
@@ -85,7 +85,10 @@ def choose_next(node, queue, blocked = (), power = Power, rng = random, choices 
     for n in choices:
         if n in blocked:
             continue
-        T = scale * (choices[n] + TIME_TO_EXIT[n])
+        if h is None:                               # fixed: empty-building shortest time
+            T = scale * (choices[n] + TIME_TO_EXIT[n])
+        else:                                       # dynamic: includes queues further on
+            T = scale * choices[n] + h[n]
         flow = INFO[n]["flow"]
         if flow is not None:
             T += queue.get(n, 0)/ flow # waiting time at n, use 0 if there is no queue

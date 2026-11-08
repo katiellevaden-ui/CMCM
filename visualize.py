@@ -5,7 +5,8 @@ Figures for the paper, built around the two scenario layers in scenarios.py
 (3 audiences x 7 events = 21 scenarios). Everything is saved in results/.
 
   network.png     the building as a network
-  evacuation.png  people out over time: students vs concert vs concert + CM
+  evacuation.png  people out over time: students vs concert vs concert + CM (all runs)
+  evacuation_events.png  people out over time: one panel per audience, one line per event
   summary.png     time until everyone (100%) and 95% are out, all 21 scenarios
   spread.png      last-out time over RUNS runs: one panel per audience, one box per event
   exits.png       people per exit A-H: students vs concert vs concert + CM
@@ -17,6 +18,7 @@ import os
 import sys
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap
 
 from building import INFO, NEXT, SEATS
@@ -36,9 +38,10 @@ INK, INK_2, MUTED = "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS = "#e1e0d9", "#c3c2b7"
 # each audience keeps its colour in every figure
 AUDIENCE_COLOR = {"students": BLUE, "concert": PINK, "concert + CM": BLACK}
-# heat maps: blue = faster than 180 s, white = 180 s, pink = slower
-BLUE_PINK = LinearSegmentedColormap.from_list(
-    "blue_pink", ["#0f4c99", BLUE, "#f7f7f7", PINK, "#7a1240"])
+# heat maps: green = faster than 180 s, white = 180 s, red = slower
+# (not blue/pink, so they are not mistaken for the audience colours)
+GREEN_RED = LinearSegmentedColormap.from_list(
+    "green_red", ["#1e6b3a", "#5aa469", "#f7f7f7", "#d9534f", "#8b1a1a"])
 
 plt.rcParams.update({
     "figure.facecolor": "white", "axes.facecolor": "white",
@@ -66,13 +69,15 @@ def save(fig, filename):
 # ---------------------------------------------------------------------------
 def run_all(runs):
     """results[scenario] = list of summaries (one per seed);
-    curves[scenario] = sorted exit times of seed 0 (for the evacuation curves)."""
+    curves[scenario] = list of sorted exit times, one list per seed (for the evacuation curves)."""
     results, curves = {}, {}
     for k, (scen, settings) in enumerate(SCENARIOS.items(), 1):
         print(f"  running {k}/{len(SCENARIOS)}: {scen}")
-        people = run(0, settings)
-        curves[scen] = sorted(p.t_exit for p in people if p.t_exit is not None)
-        results[scen] = [summary(people)] + [summary(run(s, settings)) for s in range(1, runs)]
+        results[scen], curves[scen] = [], []
+        for s in range(runs):
+            people = run(s, settings)
+            results[scen].append(summary(people))
+            curves[scen].append(sorted(p.t_exit for p in people if p.t_exit is not None))
     return results, curves
 
 
@@ -97,7 +102,7 @@ def draw_network():
             ax.annotate("", xy=pos[b], xytext=pos[a],
                         arrowprops=dict(arrowstyle="->", color=AXIS, lw=0.7,
                                         shrinkA=10, shrinkB=10))
-    colors = {"spot": BLUE, "stair": BLACK, "exit": PINK}
+    colors = {"spot": "#9a8aa6", "stair": "#9b9a97", "exit": "#8fa58c"}   # Morandi purple / gray / green
     for n, (x, y) in pos.items():
         kind = INFO[n]["kind"]
         size = 60 + 3 * SEATS.get(n, 0) if kind == "spot" else 300
@@ -114,35 +119,109 @@ def draw_network():
 
 
 # ---------------------------------------------------------------------------
-# 2. People out over time: the three audiences (no event), one line each (seed 0)
+# 2. People out over time: the three audiences (no event), over ALL runs.
+#    Line = median run-to-run count at each time; band = fastest to slowest run.
 # ---------------------------------------------------------------------------
+def until_done(y):
+    """Index just after the first point where y reaches TOTAL (everyone out),
+    so a curve can be cut there instead of running flat along the top."""
+    full = np.nonzero(y >= TOTAL)[0]
+    return full[0] + 1 if len(full) else len(y)
+
+
 def draw_evacuation(curves):
-    fig, ax = plt.subplots(figsize=(8, 5))
+    grid = np.arange(0, max(max(c[-1] for c in curves[name(a, "no event")])
+                            for a in AUDIENCES) + 10, 0.5)       # times to evaluate (s)
+    fig, (ax, zoom) = plt.subplots(1, 2, figsize=(12, 5), width_ratios=[3, 2])
     for aud in AUDIENCES:
-        times = curves[name(aud, "no event")]
-        ax.plot(times, range(1, len(times) + 1), color=AUDIENCE_COLOR[aud], lw=2.2,
-                label=aud, solid_capstyle="round")
+        runs_ = curves[name(aud, "no event")]
+        # people out by time t, for every run: count of exit times <= t
+        out = np.array([np.searchsorted(times, grid, side="right") for times in runs_])
+        last = [times[-1] for times in runs_]                    # 100% time of each run
+        color = AUDIENCE_COLOR[aud]
+        med = np.median(out, axis=0)
+        n_band = until_done(out.min(axis=0))     # band ends when the slowest run is done
+        n_med = until_done(med)                  # line ends when the median run is done
+        for a_ in (ax, zoom):                                    # same curves in both panels
+            a_.fill_between(grid[:n_band], out.min(axis=0)[:n_band], out.max(axis=0)[:n_band],
+                            color=color, alpha=0.2, lw=0)
+            a_.plot(grid[:n_med], med[:n_med], color=color, lw=2.2,
+                    label=f"{aud}: {np.mean(last):.0f} s",
+                    solid_capstyle="round")
 
     # reference lines: everyone out (top) and the 180 s requirement
     ref = dict(color=MUTED, ls=(0, (4, 3)), lw=1, zorder=1)
-    ax.axhline(TOTAL, **ref)
+    for a_ in (ax, zoom):
+        a_.axhline(TOTAL, **ref)
+        a_.axvline(LIMIT, **ref)
+        a_.set_xlabel("Time since alarm (s)")
     ax.text(2, TOTAL + 12, f"all {TOTAL} people out", fontsize=9, color=INK_2, va="bottom")
-    ax.axvline(LIMIT, **ref)
     ax.text(LIMIT - 3, TOTAL * 0.04, f"{LIMIT} s requirement", ha="right",
             fontsize=9, color=INK_2)
 
-    ax.set_xlim(0, max(max(curves[name(a, "no event")]) for a in AUDIENCES) + 10)
+    ax.set_xlim(0, grid[-1])
     ax.set_ylim(0, TOTAL * 1.08)
-    ax.set_xlabel("Time since alarm (s)")
     ax.set_ylabel("People out of the building")
-    ax.set_title(f"Evacuation of {TOTAL} people, no event (one run each)")
-    ax.legend(loc="upper left", bbox_to_anchor=(0.01, 0.93), handlelength=1.8)
+    ax.set_title(f"All {TOTAL} people, no event")
+    ax.legend(loc="lower right", bbox_to_anchor=(1, 0.1), handlelength=1.8,
+              title="everyone out (average)", title_fontsize=9, alignment="left",
+              frameon=True, facecolor="white", edgecolor="none", framealpha=1)
+
+    # zoom: the last 100 people, where the 180 s requirement is decided
+    zoom.set_xlim(140, grid[-1])
+    zoom.set_ylim(TOTAL - 100, TOTAL + 5)
+    zoom.set_title("Zoom: the last 100 people")
+    zoom.text(LIMIT + 1.5, TOTAL - 96, f"{LIMIT} s", fontsize=9, color=INK_2)
+
+    fig.suptitle(f"Evacuation over {len(runs_)} runs: line = median, "
+                 "band = fastest to slowest run", x=0.01, ha="left", fontsize=12, color=INK)
     save(fig, "evacuation.png")
 
 
 # ---------------------------------------------------------------------------
+# 2b. People out over time for every event: one panel per audience,
+#     one line per event (median over the runs), "no event" in black as reference
+# ---------------------------------------------------------------------------
+# one colour per event (colourblind-safe); "no event" = black reference line
+EVENT_PALETTE = ["#4c9be8", "#5cb88a", "#e9b949", "#e76f51", "#9b72cf", "#2bb5b8"]
+EVENT_COLOR = {}
+for k, e in enumerate(e for e in EVENTS if e != "no event"):
+    EVENT_COLOR[e] = EVENT_PALETTE[k % len(EVENT_PALETTE)]
+EVENT_COLOR["no event"] = BLACK
+
+
+def draw_evacuation_events(curves):
+    grid = np.arange(0, max(max(c[-1] for c in curves[s]) for s in SCENARIOS) + 10, 0.5)
+    fig, axes = plt.subplots(1, len(AUDIENCES), figsize=(15, 4.8), sharex=True, sharey=True)
+    for ax, aud in zip(axes, AUDIENCES):
+        for ev in EVENTS:
+            runs_ = curves[name(aud, ev)]
+            out = np.array([np.searchsorted(times, grid, side="right") for times in runs_])
+            med = np.median(out, axis=0)
+            n = until_done(med)                  # stop the line once everyone is out
+            ax.plot(grid[:n], med[:n], color=EVENT_COLOR[ev],
+                    lw=1.5 if ev == "no event" else 2.4, label=ev, alpha=1 if ev == "no event" else 0.9,
+                    solid_capstyle="round",
+                    zorder=5 if ev == "no event" else 2)    # reference line on top
+        ax.axhline(TOTAL, color=MUTED, ls=(0, (4, 3)), lw=1, zorder=1)
+        ax.axvline(LIMIT, color=MUTED, ls=(0, (4, 3)), lw=1, zorder=1)
+        ax.text(LIMIT + 4, TOTAL * 0.04, f"{LIMIT} s", fontsize=8, color=INK_2)
+        ax.set_title(aud)
+        ax.set_xlabel("Time since alarm (s)")
+        ax.set_xlim(0, grid[-1])
+        ax.set_ylim(0, TOTAL * 1.05)
+    axes[0].set_ylabel("People out of the building")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=len(EVENTS), fontsize=9,
+               bbox_to_anchor=(0.5, -0.07))
+    fig.suptitle(f"Evacuation by event (median of {len(runs_)} runs per scenario)",
+                 x=0.01, ha="left", fontsize=12, color=INK)
+    save(fig, "evacuation_events.png")
+
+
+# ---------------------------------------------------------------------------
 # 3. All 21 results in two grids: time until EVERYONE is out (100%) and until 95%
-#    are out. Colored by distance from 180 s (blue = under, pink = over).
+#    are out. Colored by distance from 180 s (green = under, red = over).
 # ---------------------------------------------------------------------------
 def draw_summary(results, runs):
     auds, evs = list(AUDIENCES), list(EVENTS)
@@ -158,7 +237,7 @@ def draw_summary(results, runs):
     fig, axes = plt.subplots(2, 1, figsize=(11, 6.4))
     for ax, (key, title) in zip(axes, panels):
         mean = [[m for m, _ in row] for row in stats[key]]
-        im = ax.imshow(mean, cmap=BLUE_PINK, norm=norm, aspect="auto")
+        im = ax.imshow(mean, cmap=GREEN_RED, norm=norm, aspect="auto")
         for i in range(len(auds)):
             for j in range(len(evs)):
                 m, ci = stats[key][i][j]
@@ -184,19 +263,24 @@ def draw_summary(results, runs):
 # ---------------------------------------------------------------------------
 # 4. Spread over runs: last-out time, one panel per audience, one box per event
 # ---------------------------------------------------------------------------
+# box fill per audience: concert + CM uses a mid grey instead of black,
+# so its boxes read like the blue and pink ones (with a dark median line)
+BOX_COLOR = {"students": BLUE, "concert": PINK, "concert + CM": "#8b8b96"}
+
+
 def draw_spread(results, runs):
     fig, axes = plt.subplots(1, len(AUDIENCES), figsize=(14, 4.6), sharey=True)
     for ax, aud in zip(axes, AUDIENCES):
         data = [[r["t_last"] for r in results[name(aud, ev)]] for ev in EVENTS]
         box = ax.boxplot(data, patch_artist=True, widths=0.6,
-                         medianprops=dict(color="white" if AUDIENCE_COLOR[aud] == BLACK else INK, lw=1.4),
+                         medianprops=dict(color=INK, lw=1.4),
                          whiskerprops=dict(color=MUTED), capprops=dict(color=MUTED),
                          flierprops=dict(marker="o", markersize=4, markerfacecolor="none",
                                          markeredgecolor=MUTED))
         for patch in box["boxes"]:
-            patch.set_facecolor(AUDIENCE_COLOR[aud])
+            patch.set_facecolor(BOX_COLOR[aud])
             patch.set_alpha(0.85)
-            patch.set_edgecolor("white")
+            patch.set_edgecolor(BOX_COLOR[aud])   # same as the fill: short boxes stay visible
         ax.set_xticks(range(1, len(EVENTS) + 1))
         ax.set_xticklabels(list(EVENTS), rotation=35, ha="right")
         ax.axhline(LIMIT, color=INK_2, ls=(0, (4, 3)), lw=1)
@@ -237,6 +321,7 @@ if __name__ == "__main__":
     results, curves = run_all(runs)
     draw_network()
     draw_evacuation(curves)
+    draw_evacuation_events(curves)
     draw_summary(results, runs)
     draw_spread(results, runs)
     draw_exits(results)

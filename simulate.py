@@ -12,7 +12,7 @@ import math
 import random
 from collections import Counter
 
-from building import INFO, SEATS, NEXT, CM_NEXT, WALK_SPEED, STAIR_TIME, MERGE, crowd_speed, wall_options
+from building import dynamic_time_to_exit, INFO, SEATS, NEXT, CM_NEXT, WALK_SPEED, STAIR_TIME, MERGE, crowd_speed, wall_options
 from individuals import Person, choose_next, Power
 
 DT = 0.25        # time step (s)
@@ -25,7 +25,7 @@ SIGMA = math.sqrt(math.log(1 + (REACT_SD / REACT_MEAN) ** 2))
 MU = math.log(REACT_MEAN) - SIGMA ** 2 / 2
 
 def start_walking(p, queue, occupancy, rng, stair_time=STAIR_TIME, power=Power,
-                  informed=False, heading=None, speed=WALK_SPEED, speed_factor=1.0):
+                  informed=False, heading=None, speed=WALK_SPEED, speed_factor=1.0, h=None):
     """Choose the next node and start walking."""
     scale = WALK_SPEED / (speed * speed_factor)   # NEXT / CM_NEXT times assume WALK_SPEED
     if p.node not in NEXT:
@@ -51,7 +51,7 @@ def start_walking(p, queue, occupancy, rng, stair_time=STAIR_TIME, power=Power,
     else:
         choices = NEXT[p.node]
         target = choose_next(p.node, queue, p.known_blocked, power=power, rng=rng,
-                             scale=scale)
+                             scale=scale, h=h)
     if target is None:
         return
     walk_time = choices[target] * scale # seconds at this audience's free walking speed
@@ -87,6 +87,9 @@ def run(seed=0, settings = None):
                                                          # from when the first person reaches it
                                                          # (wheelchair in the doorway)
     hold_started = {}
+    dynamic = settings.get("dynamic", False)             # True: recompute the time to exit
+                                                         # every step, with queues included
+    scale = WALK_SPEED / (speed * speed_factor)
     rng = random.Random(seed)
     people = []
     for spot in SEATS:
@@ -105,18 +108,14 @@ def run(seed=0, settings = None):
     for p in people:
         occupancy[p.node] += 1
 
-    # every bottleneck(exists and stairs) has a budget
-    budget = {place: 0.0 for place in INFO
-              if INFO[place]["flow"] and INFO[place]["kind"] == "stair"}
+    # every stair entrance lets one person on every 1/flow seconds;
+    # stair_free[x] = the time stair x's entrance is free again
+    stair_free = {x: 0.0 for x in INFO if INFO[x]["kind"] == "stair"}
     # every exit has lanes; lane_free[e][i] = time lane i of exit e is free again
     lane_free = {e: [0.0] * INFO[e]["lanes"] for e in INFO if INFO[e]["kind"] == "exit"}
     t = 0.0
     inside = people[:]
     while inside and t<T_MAX:
-        # refill the budget
-        for place in budget:
-            per_step = INFO[place]["flow"] * DT #people per step
-            budget[place] = min(budget[place] + per_step, max(1.0, per_step))
         # count people queuing to define waiting time
         queue = {}
         for p in inside:
@@ -129,6 +128,11 @@ def run(seed=0, settings = None):
             if p.state in ("walking", "queuing") and p.next_node and p.next_node in INFO and INFO[p.next_node]["kind"] == "exit":
                 heading[p.next_node] = heading.get(p.next_node, 0) + 1
 
+        # dynamic time to exit (Managers see everyone heading to a door, others see lines)
+        h = None
+        if dynamic:
+            h = dynamic_time_to_exit(heading if informed else queue, scale, stair_time)
+
         # Queuing people FIFO
         inside.sort(key=lambda p: p.t_queue if p.state == "queuing" else float("inf"))
 
@@ -137,13 +141,13 @@ def run(seed=0, settings = None):
             if p.state == "waiting":
                 if t >= p.t_ready:
                     start_walking(p, queue, occupancy, rng, stair_time, power, informed, heading,
-                                  speed, speed_factor)
+                                  speed, speed_factor, h)
             elif p.state == "walking":
                 p.t_escape -=DT
                 if p.t_escape <=0:
                     if p.next_node is None: # nowhere left to go
                         start_walking(p, queue, occupancy, rng, stair_time, power, informed, heading,
-                                  speed, speed_factor)
+                                  speed, speed_factor, h)
                     else:
                         p.state = "queuing"
                         p.t_queue = t
@@ -176,27 +180,34 @@ def run(seed=0, settings = None):
                     i = min(range(len(lanes)), key=lambda k: lanes[k])   # earliest-free lane
                     if lanes[i] <= t:
                         # they step through when the lane frees up (or when they arrived,
-                        # if later), not at the next tick: keeps the flow exactly lanes/T_PASS
+                        # if later), not at the next tick: keeps the flow exactly lanes/t_pass
                         start = max(lanes[i], p.t_queue)
                         lanes[i] = start + INFO[target]["t_pass"]
                         occupancy[p.node] -=1
                         p.state = "exited"
                         p.t_exit = start
                 else:
-                    # a stair (step on if it has room and its budget allows), or a
+                    # a stair (step on if it has room and its entrance is free), or a
                     # first-floor spot at the bottom of a stair (step in if it has room)
                     has_room = occupancy[target] < INFO[target]["cap"]
-                    has_budget = target not in budget or budget[target] >= 1
-                    if has_room and has_budget:
-                        if target in budget:
-                            budget[target] -= 1
+                    is_stair = target in stair_free
+                    has_turn = (not is_stair) or stair_free[target] <= t
+                    if has_room and has_turn:
+                        if is_stair:
+                            # step on when the entrance frees up (or when they arrived, if
+                            # later), not at this tick: keeps the flow exactly 1/flow per person
+                            # whatever DT is. Never earlier than the previous tick.
+                            start = max(stair_free[target], p.t_queue, t - DT)
+                            stair_free[target] = start + 1 / INFO[target]["flow"]
                         occupancy[p.node] -= 1
                         occupancy[target] += 1
                         p.node = target
                         p.visited.add(target)
                         p.t_queue = None
                         start_walking(p, queue, occupancy, rng, stair_time, power, informed, heading,
-                                  speed, speed_factor)
+                                  speed, speed_factor, h)
+                        if is_stair:
+                            p.t_escape -= t - start   # the stair walk began at start
             
         # remove people who got out, move the clock.
         inside = [p for p in inside if p.state != "exited"]

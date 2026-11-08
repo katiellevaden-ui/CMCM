@@ -34,22 +34,22 @@ GROSS_AREA = {1: 18602 * SQFT,    # first floor  = 1728 m^2
 # 2. First floor: which exits each spot can use, and how far (m)
 # ==================================================================
 SPOT_EXITS = {
-    "S1":  {"A": 17, "B": 31},
-    "S2":  {"A": 15, "B": 24},
-    "S3":  {"B": 18, "C": 22},
-    "S4":  {"A": 25, "G": 24, "H": 35},
-    "S5":  {"C": 30, "D": 29, "E": 31},
-    "S6":  {"C": 24, "D": 22, "E": 25},
-    "S7":  {"G": 15, "H": 27},
-    "S8":  {"F": 20, "G": 14},
-    "S9":  {"E": 24, "F": 18},
-    "S10": {"G": 10, "H": 23},
+    "S1":  {"A": 17, "B": 30},
+    "S2":  {"A": 18, "B": 26},
+    "S3":  {"B": 21, "C": 18},
+    "S4":  {"A": 22, "G": 21, "H": 31},
+    "S5":  {"C": 26, "D": 28, "E": 25},
+    "S6":  {"C": 19, "D": 20, "E": 17},
+    "S7":  {"G": 16, "H": 24},
+    "S8":  {"F": 27, "G": 19},
+    "S9":  {"E": 19, "F": 24},
+    "S10": {"G": 9,  "H": 20},
     "S11": {"F": 15, "G": 10},
-    "S12": {"E": 21, "F": 17},
-    "S13": {"C": 10, "D": 8, "E": 11},
-    "S14": {"B": 14, "C": 21},
-    "S15": {"A": 11, "B": 18},
-    "S16": {"A": 11, "B": 28},
+    "S12": {"E": 15, "F": 17},
+    "S13": {"C": 18, "D": 19, "E": 16},
+    "S14": {"B": 19, "C": 16},
+    "S15": {"A": 11, "B": 17},
+    "S16": {"A": 9,  "B": 23},
 }
 
 # ==================================================================
@@ -60,12 +60,12 @@ SPOT_EXITS = {
 #                               through that spot's exits with everyone else
 # ==================================================================
 BALCONY_STAIRS = {            # team's measurements (m)
-    "S17": {"X": 9.3},
-    "S18": {"X": 21.6, "Y": 10.2},
-    "S19": {"Y": 9.0, "Z": 20.7},
-    "S20": {"Y": 20.9, "Z": 8.9},
-    "S21": {"W": 21.2, "Z": 10.4},
-    "S22": {"W": 8.9},
+    "S17": {"X": 8.2},
+    "S18": {"X": 20.1, "Y": 6.9},
+    "S19": {"Y": 7.6, "Z": 18.9},
+    "S20": {"Y": 18.9, "Z": 7.6},
+    "S21": {"W": 19.1, "Z": 7.1},
+    "S22": {"W": 7.5},
 }
 
 # Where each balcony group merges on the first floor (team's percentages).
@@ -92,14 +92,14 @@ STAIR_LANDS_IN = {
 #     A blocked door sends people along the wall to the next door.
 # ==================================================================
 WALL_ORDER = ["A", "B", "C", "D", "E", "F", "G", "H"]
-WALL_DIST = {("A", "B"): 17.8, ("B", "C"): 15.1, ("C", "D"): 3.4, ("D", "E"): 3.8,
-             ("E", "F"): 17.4, ("F", "G"): 14.9, ("G", "H"): 22.8}
+WALL_DIST = {("A", "B"): 19.2, ("B", "C"): 16.4, ("C", "D"): 7.7, ("D", "E"): 8.1,
+             ("E", "F"): 18.2, ("F", "G"): 16.9, ("G", "H"): 21.2}
 
 
 def wall_options(door, known_blocked):
     """From a blocked `door`, the nearest door in each direction along the wall that
     is not known to be blocked, with the walking distance (m) to it.
-    Example: from D with C known blocked -> {"B": 3.4 + 15.1, "E": 3.8}"""
+    Example: from D with C known blocked -> {"B": 7.7 + 16.4, "E": 8.1}"""
     options = {}
     k = WALL_ORDER.index(door)
     for step in (-1, +1):                       # left, then right
@@ -232,6 +232,30 @@ for stair in STAIR_LANDS_IN: # stair: go down, land in one of its spots (equally
  
 for spot in BALCONY_STAIRS: # balcony: walk to a stair, then as above
     TIME_TO_EXIT[spot] = min(t + TIME_TO_EXIT[stair] for stair, t in NEXT[spot].items())
+
+
+# ==================================================================
+# Dynamic time to exit: like TIME_TO_EXIT, but recomputed every time step
+# and including the waiting time Q/f at every door and stair further along.
+#     h_e = 0                                            (exit)
+#     h_s = min_e [ s*c_se + Q_e/f_e ]                   (first-floor spot)
+#     h_x = tau + mean of h_s over its landing spots     (stair)
+#     h_b = min_x [ s*c_bx + Q_x/f_x + h_x ]             (balcony spot)
+# s = walking-time scale of this audience, tau = this scenario's stair time.
+# ==================================================================
+def dynamic_time_to_exit(queue, scale=1.0, stair_time=STAIR_TIME):
+    def wait(n):                         # expected wait at a bottleneck
+        return queue.get(n, 0) / INFO[n]["flow"]
+
+    h = {e: 0.0 for e in "ABCDEFGH"}
+    for spot in SPOT_EXITS:
+        h[spot] = min(scale * t + wait(e) for e, t in NEXT[spot].items())
+    for stair in STAIR_LANDS_IN:
+        spots = STAIR_LANDS_IN[stair]
+        h[stair] = stair_time + sum(h[s] for s in spots) / len(spots)
+    for spot in BALCONY_STAIRS:
+        h[spot] = min(scale * t + wait(x) + h[x] for x, t in NEXT[spot].items())
+    return h
 
 # =======
 if __name__ == "__main__":

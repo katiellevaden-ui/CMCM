@@ -14,16 +14,19 @@ from building import STAIR_TIME_LECTURE, STAIR_TIME_CONCERT
 REACT_CAP = 60   # s: everyone has started moving by then. PLACEHOLDER, needs a reason
                  # (cuts ~5% of students' and ~35% of concert reaction times)
 
+DYNAMIC = True   # recompute the time to exit every step, with queues further along
+                 # (dynamic Dijkstra / Bellman, see dynamic_time_to_exit in building.py)
+
 AUDIENCES = {
     "students":     {"react_mu": 2.94,  "react_sigma": 0.71, "speed": 1.321,
                      "stair_time": STAIR_TIME_LECTURE, "power": 0.3,
-                     "react_cap": REACT_CAP},
+                     "react_cap": REACT_CAP, "dynamic": DYNAMIC},
     "concert":      {"react_mu": 3.93,  "react_sigma": 0.44, "speed": 1.056,
                      "stair_time": STAIR_TIME_CONCERT, "power": 0.1,
-                     "react_cap": REACT_CAP},
+                     "react_cap": REACT_CAP, "dynamic": DYNAMIC},
     "concert + CM": {"react_mu": 3.642, "react_sigma": 0.44, "speed": 1.056,
                      "stair_time": STAIR_TIME_CONCERT, "power": 0.5, "informed": True,
-                     "react_cap": REACT_CAP},
+                     "react_cap": REACT_CAP, "dynamic": DYNAMIC},
 }
 
 # ------------------------------------------------------------------
