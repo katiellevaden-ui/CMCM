@@ -153,6 +153,12 @@ def run(seed=0, settings = None):
                     else:
                         p.state = "queuing"
                         p.t_queue = t
+                        if INFO[p.next_node]["kind"] == "exit":
+                            # arrived at the door: now standing in the doorway line,
+                            # no longer in the seating spot's crowd
+                            occupancy[p.node] -= 1
+                            occupancy[p.next_node] += 1
+                            p.node = p.next_node
             elif p.state == "queuing":
                 target = p.next_node
                 if target in blocked:

@@ -35,9 +35,10 @@ AUDIENCES = {
 # ------------------------------------------------------------------
 EVENTS = {
     "no event":        {},
-    "wheelchair at E": {"hold": {"E": 11.7}},      # E blocked 11.7 s from when the first
+    "wheelchair at D": {"hold": {"D": 8.25}},      # D blocked 8.25 s (wheelchair crossing
+                                                   # 6 m at 0.727 m/s) from when the first
                                                    # person reaches it
-    "LED":             {"speed_factor": 1.077},    # everyone walks 7.7% faster (not stairs)
+    "LED":             {"speed_factor": 1.0314},   # everyone walks 3.14% faster (not stairs)
     "cameras":         {"informed": True, "all_doors": True},
                                                    # same information as Crowd Managers:
                                                    # blocked doors, crowd heading to each door,

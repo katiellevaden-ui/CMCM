@@ -108,17 +108,18 @@ def wall_options(door, known_blocked):
 #      PLACEHOLDER: only the totals are real (first floor 1010, balcony 316).
 # ==================================================================
 SEATS = {
-    "S1": 30, "S2": 65, "S3": 40, "S4": 55, "S5": 140, "S6": 60, "S7": 30,
-    "S8": 65, "S9": 39, "S10": 40, "S11": 60, "S12": 95, "S13": 96,
-    "S14": 95, "S15": 60, "S16": 40,
-    "S17": 55, "S18": 52, "S19": 52, "S20": 52, "S21": 50, "S22": 55,
+   "S1": 17, "S2": 72, "S3": 29, "S4": 41, "S5": 208, "S6": 37, "S7": 22,
+   "S8": 72, "S9": 29, "S10": 40, "S11": 60, "S12": 98, "S13": 88,
+   "S14": 98, "S15": 59, "S16": 40,
+   "S17": 54, "S18": 54, "S19": 50, "S20": 50, "S21": 54, "S22": 54,
 }
+
 
 # ==================================================================
 # 5. Sizes
 # ==================================================================
 SEAT_AREA   = 7 * SQFT    # 0.65 m^2 per seated person (building-code value)
-AISLE_EXTRA = 15          # PLACEHOLDER: m^2 of aisle in each spot
+AISLE_EXTRA = 6.1         # m^2 of aisle in each spot
 STAIR_AREA  = 1.2 * 9     # PLACEHOLDER: stair 1.2 m wide x 9 m long
 # Exits: how many people can go through each door side by side (team's measurement),
 # and how long one person occupies a lane before the next can follow
